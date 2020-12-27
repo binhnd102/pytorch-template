@@ -1,7 +1,7 @@
 import os
 import shutil
 import torch
-
+import torch.nn as nn
 
 class TwoCropTransform:
     """Create two crops of the same image"""
@@ -64,3 +64,14 @@ def save_checkpoint(state, is_best, expname='default', filename='checkpoint.pth.
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, 'runs/%s/' % (expname) + 'model_best.pth.tar')
+
+
+def freeze_bn(module):
+    for m in module.modules():
+        # print(module)
+        if isinstance(m, nn.BatchNorm2d):
+            if hasattr(m, 'weight'):
+                m.weight.requires_grad_(False)
+            if hasattr(m, 'bias'):
+                m.bias.requires_grad_(False)
+            m.eval()

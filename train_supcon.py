@@ -9,6 +9,7 @@ from warmup_scheduler import GradualWarmupScheduler
 from utils import TwoCropTransform, AverageMeter, save_checkpoint, get_learning_rate, accuracy
 from dataset.image_folder import DatasetManager
 from model.supcon_resnet import SupConResNet
+from model.efficientnet import SupConEfficient
 from losses.sup_contrastive import SupConLoss
 
 
@@ -29,7 +30,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
             labels = labels.cuda(non_blocking=True)
         bsz = labels.shape[0]
         # compute losses
-        features = model(images)
+        features = model(images, contrastive=True)
         f1, f2 = torch.split(features, [bsz, bsz], dim=0)
         features = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)
         loss = criterion(features, labels)
@@ -72,7 +73,7 @@ verbose = 1
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 best_err1 = 100
 best_err5 = 100
-arch_name = 'resnet50'
+arch_name = 'efficientnet-b0'
 
 # Transform for constrastive learning
 train_transform = transforms.Compose([
@@ -89,7 +90,7 @@ train_transform = TwoCropTransform(train_transform)
 train_dataset, valid_dataset = DatasetManager(data_dir, train_transform=train_transform).split()
 train_loader = DataLoader(train_dataset, batch_size=12, shuffle=True, drop_last=True)
 
-model = SupConResNet(arch_name)
+model = SupConEfficient(arch_name, num_classes=5)
 model = model.to(device)
 # define loss function (criterion) and optimizer
 criterion = SupConLoss(temperature).to(device)
