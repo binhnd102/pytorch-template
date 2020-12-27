@@ -3,7 +3,7 @@ import tarfile
 import os
 
 
-FLOWERS_DIR = './flower_photos'
+FLOWERS_DIR = './data'
 
 
 def download_images():
