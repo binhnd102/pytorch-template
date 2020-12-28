@@ -52,8 +52,9 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
         wrong_k = batch_size - correct_k
         res.append(wrong_k.mul_(100.0 / batch_size))
-
-    return res
+    if len(res) > 1:
+        return res
+    return res[0]
 
 
 def save_checkpoint(state, is_best, expname='default', filename='checkpoint.pth.tar'):
@@ -75,3 +76,8 @@ def freeze_bn(module):
             if hasattr(m, 'bias'):
                 m.bias.requires_grad_(False)
             m.eval()
+
+
+def freeze_module(module, trainable=False):
+    for param in module.parameters():
+        param.requires_grad = trainable

@@ -3,7 +3,7 @@ from efficientnet_pytorch import EfficientNet
 from efficientnet_pytorch.utils import MemoryEfficientSwish
 from torch import nn
 from torch.nn import functional as F
-from utils import freeze_bn
+from utils import freeze_bn, freeze_module
 
 
 def get_model(name, num_classes):
@@ -51,3 +51,9 @@ class SupConEfficient(nn.Module):
             x = self._dropout(x)
             x = self._fc(x)
         return x
+
+    def freeze_encoder(self):
+        freeze_module(self.encoder, trainable=False)
+
+    def unfreeze_encoder(self):
+        freeze_module(self.encoder, trainable=True)
