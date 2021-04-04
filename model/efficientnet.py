@@ -14,6 +14,7 @@ def get_model(name, num_classes):
 
 model_dict = {
     'efficientnet-b0': 1280,
+    'efficientnet-b2': 1408
 }
 
 

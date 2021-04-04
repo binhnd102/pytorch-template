@@ -4,8 +4,7 @@ import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from warmup_scheduler import GradualWarmupScheduler
-
+from torchvision.datasets import ImageFolder
 from utils import TwoCropTransform, AverageMeter, save_checkpoint, get_learning_rate, accuracy
 from dataset.image_folder import DatasetManager
 from model.supcon_resnet import SupConResNet
@@ -13,19 +12,37 @@ from model.efficientnet import SupConEfficient
 from losses.sup_contrastive import SupConLoss
 
 
-def train(train_loader, model, criterion, optimizer, epoch):
+# hyper-parameters
+num_workers = 2
+size = 260
+temperature = 0.07
+data_dir = 'data/flower_photos'
+lr = 0.005
+momentum = 0.9
+weight_decay = 1e-5
+epochs = 100
+print_freq = 5
+verbose = 1
+# device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+is_using_gpu = False
+device = torch.device('cpu')
+best_err1 = 100
+best_err5 = 100
+arch_name = 'efficientnet-b2'
+
+def train(train_loader, model, criterion, optimizer, epoch, scheduler):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     end = time.time()
-    current_LR = get_learning_rate(optimizer)[0]
     # switch to train mode
     model.train()
     for batch, (images, labels) in enumerate(train_loader):
+        current_LR = get_learning_rate(optimizer)[0]
         # measure data loading time
         data_time.update(time.time() - end)
         images = torch.cat([images[0], images[1]], dim=0)
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and is_using_gpu:
             images = images.cuda(non_blocking=True)
             labels = labels.cuda(non_blocking=True)
         bsz = labels.shape[0]
@@ -41,6 +58,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -57,24 +75,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
     return losses.avg
 
 
-# hyper-parameters
-bs = 4
-num_workers = 2
-epochs = 50
-size = 224
-temperature = 0.07
-data_dir = 'data/flower_photos'
-lr = 0.005
-momentum = 0.9
-weight_decay = 1e-5
-epochs = 50
-print_freq = 5
-verbose = 1
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-best_err1 = 100
-best_err5 = 100
-arch_name = 'efficientnet-b0'
-
 # Transform for constrastive learning
 train_transform = transforms.Compose([
     transforms.RandomResizedCrop(size=size, scale=(0.2, 1.)),
@@ -87,28 +87,30 @@ train_transform = transforms.Compose([
     transforms.RandomErasing()
 ])
 train_transform = TwoCropTransform(train_transform)
-train_dataset, valid_dataset = DatasetManager(data_dir, train_transform=train_transform).split()
-train_loader = DataLoader(train_dataset, batch_size=12, shuffle=True, drop_last=True)
 
-model = SupConEfficient(arch_name, num_classes=5)
+# Create dataset
+train_dataset = ImageFolder('../data/dataset', transform=train_transform)
+labels = train_dataset.classes
+train_loader = DataLoader(train_dataset, batch_size=24, shuffle=True, drop_last=True)
+
+model = SupConEfficient(arch_name, num_classes=len(labels))
 model = model.to(device)
-# define loss function (criterion) and optimizer
+# # define loss function (criterion) and optimizer
 criterion = SupConLoss(temperature).to(device)
 
 optimizer = torch.optim.SGD(model.parameters(), lr,
                             momentum=momentum,
                             weight_decay=weight_decay)
-
-scheduler_steplr = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
-scheduler_warmup = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=5, after_scheduler=scheduler_steplr)
+scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, step_size_up=len(train_loader) * 2, base_lr=5e-4, max_lr=lr)
+# scheduler_steplr = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
+# scheduler_warmup = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=5, after_scheduler=scheduler_steplr)
 
 
 train_loss = None
 best_loss = 100
 for epoch in range(0, epochs):
-    scheduler_warmup.step(epoch, train_loss)
     # train for one epoch
-    train_loss = train(train_loader, model, criterion, optimizer, epoch)
+    train_loss = train(train_loader, model, criterion, optimizer, epoch, scheduler)
 
     # remember best prec@1 and save checkpoint
     is_best = train_loss <= best_loss
@@ -130,6 +132,7 @@ for epoch in range(0, epochs):
         'epoch': epoch,
         'state_dict': model.state_dict(),
         'optimizer': optimizer.state_dict(),
+        'loss': train_loss
     }, is_best)
 
 

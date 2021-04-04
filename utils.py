@@ -57,14 +57,14 @@ def accuracy(output, target, topk=(1,)):
     return res[0]
 
 
-def save_checkpoint(state, is_best, expname='default', filename='checkpoint.pth.tar'):
-    directory = "runs/%s/" % (expname)
+def save_checkpoint(state, is_best, root="runs", expname='default', filename='checkpoint.pth.tar'):
+    directory = "%s/%s/" % (root, expname)
     if not os.path.exists(directory):
         os.makedirs(directory)
     filename = directory + filename
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, 'runs/%s/' % (expname) + 'model_best.pth.tar')
+        shutil.copyfile(filename, '%s/%s/' % (root, expname) + 'model_best.pth.tar')
 
 
 def freeze_bn(module):
